@@ -635,6 +635,20 @@ section[data-testid="stSidebar"] div.stButton > button * {
     color: #FFFFFF !important;
 }
 
+section[data-testid="stSidebar"],
+[data-testid="stSidebar"],
+[data-testid="stSidebarNav"] {
+    display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+}
+
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+.main {
+    margin-left: 0 !important;
+}
+
 .a321-page {
     background: var(--color-page);
     border-radius: 0 0 12px 12px;
@@ -994,6 +1008,9 @@ div[data-testid="stVerticalBlock"]:has(> div[data-testid="stElementContainer"] .
 }
 
 .a321-card-heading-row h3 {
+    display: flex;
+    align-items: center;
+    gap: 9px;
     margin: 0;
     font-size: 1rem;
 }
@@ -1007,7 +1024,7 @@ div[data-testid="stVerticalBlock"]:has(> div[data-testid="stElementContainer"] .
 .a321-simbrief-title {
     display: flex;
     gap: 9px;
-    align-items: start;
+    align-items: flex-start;
     margin-bottom: 10px;
 }
 
@@ -1394,6 +1411,33 @@ def minutes_to_hmm(m):
     return f"{h}:{mins:02d}"
 
 
+def duration_text_to_minutes(value) -> int | None:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    match = re.match(r"^(\d+):(\d{2})$", text)
+    if match:
+        return int(match.group(1)) * 60 + int(match.group(2))
+    hour_match = re.search(r"(\d+)\s*h", text)
+    minute_match = re.search(r"(\d+)\s*m", text)
+    if hour_match or minute_match:
+        hours = int(hour_match.group(1)) if hour_match else 0
+        minutes = int(minute_match.group(1)) if minute_match else 0
+        return hours * 60 + minutes
+    numeric = re.search(r"\d+", text)
+    return int(numeric.group(0)) if numeric else None
+
+
+def estimated_arrival_from_departure(departure_time: str, duration_text: str, fallback: str = "Auto after SimBrief") -> str:
+    dep_match = re.search(r"(\d{1,2}):(\d{2})", str(departure_time or ""))
+    minutes = duration_text_to_minutes(duration_text)
+    if not dep_match or minutes is None:
+        return fallback
+    departure_minutes = int(dep_match.group(1)) * 60 + int(dep_match.group(2))
+    arrival_minutes = (departure_minutes + minutes) % (24 * 60)
+    return f"{arrival_minutes // 60:02d}:{arrival_minutes % 60:02d} LT"
+
+
 def current_departure_time() -> str:
     return datetime.now().strftime("%H:%M")
 
@@ -1502,20 +1546,21 @@ def render_flight_details_table(route_row: dict | pd.Series | None, dep_info: di
     )
     if is_reference:
         rows = [
-            ("Departure", "EGLL - London Heathrow", "Estimated Arrival Time", "12 May 2024 11:45 LT"),
+            ("Departure", "EGLL - London Heathrow", "Estimated Arrival Time", estimated_arrival_from_departure("10:30", "1h 15m")),
             ("Arrival", "LFPG - Paris Charles de Gaulle", "Distance", "214 NM"),
             ("Local Departure Time", "12 May 2024 10:30 LT", "Passenger Count", "180"),
             ("Flight Duration", "1h 15m", "Cruise Altitude", "FL340"),
-            ("Weather (Departure)", dep_weather, "Route Type", "Great Circle"),
+            ("Weather (Departure)", dep_weather, "Route Type", "Direct"),
             ("Weather (Arrival)", arr_weather, "Airline / Callsign", flight_display),
         ]
     else:
+        duration_text = row_get("duration_minutes_or_text")
         rows = [
-            ("Departure", f"{dep_code} - {dep_place}", "Estimated Arrival Time", row_get("arrival_time_z", "Auto after SimBrief")),
+            ("Departure", f"{dep_code} - {dep_place}", "Estimated Arrival Time", estimated_arrival_from_departure(row_get("departure_time_z"), duration_text, row_get("arrival_time_z", "Auto after SimBrief"))),
             ("Arrival", f"{arr_code} - {arr_place}", "Distance", distance_nm),
             ("Local Departure Time", f"{row_get('departure_time_z')} LT", "Passenger Count", st.session_state.get("pax_input", "175")),
-            ("Flight Duration", row_get("duration_minutes_or_text"), "Cruise Altitude", "FL340"),
-            ("Weather (Departure)", dep_weather, "Route Type", "Great Circle"),
+            ("Flight Duration", duration_text, "Cruise Altitude", "FL340"),
+            ("Weather (Departure)", dep_weather, "Route Type", "Direct"),
             ("Weather (Arrival)", arr_weather, "Airline / Callsign", flight_display),
         ]
 
@@ -1836,7 +1881,7 @@ def selected_flight_payload(
         "distanceNm": distance_nm,
         "passengerCount": st.session_state.get("pax_input", "175"),
         "cruiseAltitude": "FL340",
-        "routeType": "Great Circle",
+        "routeType": "Direct",
         "airline": airline_code_for_theme(active_theme_key()),
         "callsign": current_flight_display(),
         "flightNumber": current_flight_number(),
@@ -2239,7 +2284,7 @@ def render_route_map(dep_info, dest_info, map_style, height: int = 340):
         data=line_df,
         get_source_position="[start_lon, start_lat]",
         get_target_position="[end_lon, end_lat]",
-        get_color=[255, 255, 255, 235],
+        get_color=[255, 132, 31, 245],
         get_width=6,
         pickable=False,
     )
@@ -2508,6 +2553,70 @@ airport_lookup_by_icao = {
 }
 
 
+def airport_search_options(query: str, limit: int = 60) -> tuple[list[str], dict[str, str]]:
+    search = normalize_search_text(query)
+    if not search:
+        return [], {}
+    required_terms = [term for term in search.split(" ") if term]
+    source = airports.drop_duplicates(subset=["icao"]).copy()
+    haystack = (
+        source[["icao", "name", "city", "country"]]
+        .fillna("")
+        .astype(str)
+        .agg(" ".join, axis=1)
+        .map(normalize_search_text)
+    )
+    mask = pd.Series(True, index=source.index)
+    for term in required_terms:
+        mask &= haystack.str.contains(term, regex=False, na=False)
+    matches = source[mask].head(limit)
+    labels: list[str] = []
+    label_to_code: dict[str, str] = {}
+    for _, row in matches.iterrows():
+        code = str(row.get("icao", "") or "").strip().upper()
+        if not code:
+            continue
+        place = city_country(row.get("city", ""), row.get("country", ""))
+        name = str(row.get("name", "") or "").strip()
+        label = f"{code} - {name}"
+        if place:
+            label += f" ({place})"
+        labels.append(label)
+        label_to_code[label] = code
+    return labels, label_to_code
+
+
+def render_airport_picker(label: str, query_key: str, choice_key: str, icao_key: str) -> str:
+    st.text_input(label, key=query_key, placeholder="ICAO, city, airport, or country")
+    query = st.session_state.get(query_key, "")
+    labels, label_to_code = airport_search_options(query)
+    current_code = str(st.session_state.get(icao_key, "") or "").strip().upper()
+    current_label = ""
+    for option_label, code in label_to_code.items():
+        if code == current_code:
+            current_label = option_label
+            break
+    options = [""] + labels
+    index = options.index(current_label) if current_label in options else 0
+    if st.session_state.get(choice_key) not in options:
+        st.session_state[choice_key] = ""
+    choice = st.selectbox(
+        f"{label} match",
+        options=options,
+        index=index,
+        key=choice_key,
+        format_func=lambda value: "Select airport..." if value == "" else value,
+        label_visibility="collapsed",
+        disabled=not labels,
+    )
+    selected_code = label_to_code.get(choice, current_code)
+    if selected_code:
+        st.session_state[icao_key] = selected_code
+    info = airport_lookup_by_icao.get(selected_code, {})
+    st.caption((info or {}).get("name", "") or "Type more to find the airport.")
+    return selected_code
+
+
 def normalize_theme_key(value: str | None) -> str:
     key = re.sub(r"[^a-z0-9]", "", str(value or "").strip().lower())
     aliases = {
@@ -2576,6 +2685,10 @@ defaults = {
     "custom_arrival_choice": None,
     "manual_departure_icao": "",
     "manual_arrival_icao": "",
+    "manual_departure_query": "",
+    "manual_arrival_query": "",
+    "manual_departure_choice_label": "",
+    "manual_arrival_choice_label": "",
     "custom_applied_departure_icao": "",
     "custom_applied_arrival_icao": "",
     "custom_departure_time": "",
@@ -2669,9 +2782,14 @@ def clear_active_route():
 
 
 def swap_manual_airport_fields() -> None:
-    dep_value = st.session_state.get("manual_departure_icao", "")
-    st.session_state["manual_departure_icao"] = st.session_state.get("manual_arrival_icao", "")
-    st.session_state["manual_arrival_icao"] = dep_value
+    for dep_key, arr_key in (
+        ("manual_departure_icao", "manual_arrival_icao"),
+        ("manual_departure_query", "manual_arrival_query"),
+        ("manual_departure_choice_label", "manual_arrival_choice_label"),
+    ):
+        dep_value = st.session_state.get(dep_key, "")
+        st.session_state[dep_key] = st.session_state.get(arr_key, "")
+        st.session_state[arr_key] = dep_value
 
 
 def apply_custom_route_pair(custom_dep: str, custom_arr: str) -> None:
@@ -3486,9 +3604,19 @@ def render_manual_planner_page() -> None:
             st.html("<div class='a321-card-heading-row'><h3>Manual Route Builder</h3><span class='a321-save-flight'>Custom</span></div>")
             c1, c2 = st.columns(2)
             with c1:
-                st.text_input("Departure ICAO", key="manual_departure_icao")
+                manual_page_dep = render_airport_picker(
+                    "Departure airport",
+                    "manual_departure_query",
+                    "manual_departure_choice_label",
+                    "manual_departure_icao",
+                )
             with c2:
-                st.text_input("Arrival ICAO", key="manual_arrival_icao")
+                manual_page_arr = render_airport_picker(
+                    "Arrival airport",
+                    "manual_arrival_query",
+                    "manual_arrival_choice_label",
+                    "manual_arrival_icao",
+                )
             c3, c4 = st.columns(2)
             with c3:
                 st.text_input("Flight number", key="simbrief_flight_number")
@@ -3498,13 +3626,13 @@ def render_manual_planner_page() -> None:
             with c5:
                 st.text_input("Cruise altitude", value="FL340", key="manual_cruise_altitude")
             with c6:
-                st.selectbox("Route type", ["Great Circle", "Direct", "Airway"], key="manual_route_type")
+                st.selectbox("Route type", ["Direct", "Airway"], key="manual_route_type")
             swap_col, plan_col = st.columns([0.2, 0.8])
             with swap_col:
                 st.button("⇄", key="manual_page_swap", width="stretch", on_click=swap_manual_airport_fields)
             with plan_col:
                 if st.button("Plan Flight", key="manual_page_plan", width="stretch", type="primary"):
-                    apply_custom_route_pair(st.session_state["manual_departure_icao"], st.session_state["manual_arrival_icao"])
+                    apply_custom_route_pair(manual_page_dep, manual_page_arr)
 
     selected_route, dep_info, arr_info, active_route = active_route_context()
     with result_col:
@@ -3829,21 +3957,27 @@ with manual_col:
         st.html('<div class="a321-dashboard-card-marker a321-route-card-marker"></div><div class="a321-card-title"><span class="a321-number-badge">2</span><span>Manual Airport Entry</span></div>')
         dep_entry_col, arr_entry_col = st.columns(2)
         with dep_entry_col:
-            st.text_input("Departure ICAO", key="manual_departure_icao")
-            dep_entry_info = airport_lookup_by_icao.get(st.session_state.get("manual_departure_icao", "").strip().upper())
-            st.caption((dep_entry_info or {}).get("name", ""))
+            dashboard_manual_dep = render_airport_picker(
+                "Departure airport",
+                "manual_departure_query",
+                "manual_departure_choice_label",
+                "manual_departure_icao",
+            )
         with arr_entry_col:
-            st.text_input("Arrival ICAO", key="manual_arrival_icao")
-            arr_entry_info = airport_lookup_by_icao.get(st.session_state.get("manual_arrival_icao", "").strip().upper())
-            st.caption((arr_entry_info or {}).get("name", ""))
+            dashboard_manual_arr = render_airport_picker(
+                "Arrival airport",
+                "manual_arrival_query",
+                "manual_arrival_choice_label",
+                "manual_arrival_icao",
+            )
         swap_col, plan_col = st.columns([0.18, 0.82])
         with swap_col:
             st.button("⇄", key="swap_manual_airports", width="stretch", on_click=swap_manual_airport_fields)
         with plan_col:
             if st.button("Plan Flight", key="plan_manual_airports", width="stretch", type="primary"):
                 apply_custom_route_pair(
-                    st.session_state.get("manual_departure_icao", ""),
-                    st.session_state.get("manual_arrival_icao", ""),
+                    dashboard_manual_dep,
+                    dashboard_manual_arr,
                 )
 
 with aircraft_col:
@@ -3925,6 +4059,11 @@ if dep_lookup and dest_lookup:
         f"{minutes} minute{'s' if minutes != 1 else ''}"
     )
 
+if active_route is None:
+    st.info("Select one known route or plan a manual airport pair.")
+else:
+    render_departure_board(active_route)
+
 details_col, simbrief_col = st.columns([2.1, 0.95], gap="small")
 
 with details_col:
@@ -3933,7 +4072,7 @@ with details_col:
             """
             <div class="a321-dashboard-card-marker a321-flight-details-card-marker"></div>
             <div class="a321-card-heading-row">
-                <h3>Flight Details</h3>
+                <h3><span class="a321-number-badge">3</span><span>Flight Details</span></h3>
                 <span class="a321-save-flight">▣&nbsp; Save Flight</span>
             </div>
             """
@@ -3971,10 +4110,7 @@ with simbrief_col:
             """
             <div class="a321-dashboard-card-marker a321-simbrief-card-marker"></div>
             <div class="a321-simbrief-title">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.4A4.5 4.5 0 1 1 17 18H7Z" stroke="var(--color-primary)" stroke-width="1.8"/>
-                    <path d="M12 13v7M8.5 16.5 12 20l3.5-3.5" stroke="var(--color-primary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+                <span class="a321-number-badge">4</span>
                 <div>
                     <h3>SimBrief Integration</h3>
                     <p>Send flight details to SimBrief to generate your OFP.</p>
@@ -4011,11 +4147,6 @@ with simbrief_col:
         else:
             st.warning("SimBrief appears after both airports are set.")
 
-if active_route is None:
-    st.info("Select one known route or plan a manual airport pair.")
-else:
-    render_departure_board(active_route)
-
 if st.session_state.get("_map_default_version") != "voyager_default_2026_06_28":
     st.session_state["map_style_choice"] = "Voyager"
     st.session_state["_map_default_version"] = "voyager_default_2026_06_28"
@@ -4034,7 +4165,7 @@ with st.container(border=True):
             """
             <div class="a321-map-header">
                 <div class="a321-map-title">
-                    <span>◉</span>
+                    <span class="a321-number-badge">5</span>
                     <span>Voyager Map</span>
                 </div>
             </div>

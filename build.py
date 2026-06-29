@@ -29,7 +29,11 @@ DATA_FILES = [
     "assets/branding/delta.png",
     "assets/branding/britishairways.png",
 ]
-COLLECT_ALL_PACKAGES = [
+COLLECT_DATA_PACKAGES = [
+    "streamlit",
+    "pydeck",
+]
+COLLECT_SUBMODULE_PACKAGES = [
     "streamlit",
     "pydeck",
     "pydub",
@@ -39,6 +43,21 @@ HIDDEN_IMPORTS = [
     "pandas",
     "pydeck",
     "pytz",
+]
+EXCLUDED_MODULES = [
+    "IPython",
+    "jupyter",
+    "matplotlib",
+    "notebook",
+    "onnxruntime",
+    "scipy",
+    "sklearn",
+    "sympy",
+    "tensorboard",
+    "tensorflow",
+    "torch",
+    "torchaudio",
+    "torchvision",
 ]
 MACOS_INFO_PLIST_UPDATES = {
     "NSAppTransportSecurity": {
@@ -78,11 +97,17 @@ def build_command() -> list[str]:
     elif WINDOWS_ICON.exists():
         command.extend(["--icon", str(WINDOWS_ICON)])
 
-    for package_name in COLLECT_ALL_PACKAGES:
-        command.extend(["--collect-all", package_name])
+    for package_name in COLLECT_DATA_PACKAGES:
+        command.extend(["--collect-data", package_name])
+
+    for package_name in COLLECT_SUBMODULE_PACKAGES:
+        command.extend(["--collect-submodules", package_name])
 
     for module_name in HIDDEN_IMPORTS:
         command.extend(["--hidden-import", module_name])
+
+    for module_name in EXCLUDED_MODULES:
+        command.extend(["--exclude-module", module_name])
 
     for relative_path in DATA_FILES:
         command.extend(["--add-data", add_data_argument(relative_path)])

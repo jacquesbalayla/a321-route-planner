@@ -1,0 +1,10 @@
+.venv/
+.pyinstaller/
+build/
+dist/
+__pycache__/
+*.pyc
+.DS_Store
+*.spec
+.streamlit/secrets.toml
+settings.json

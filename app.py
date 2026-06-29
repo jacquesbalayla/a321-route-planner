@@ -2723,7 +2723,7 @@ if query_airline_theme:
 else:
     sync_airline_theme_state(st.session_state.get("airline_theme_key", "jetblue"))
 
-if (
+if False and (
     cloud_sync_configured(ACTIVE_SETTINGS)
     and not st.session_state.get("_cloud_loaded_once")
     and not st.session_state.get("dep_icao")
@@ -2779,6 +2779,26 @@ def clear_active_route():
     st.session_state["custom_applied_departure_icao"] = ""
     st.session_state["custom_applied_arrival_icao"] = ""
     st.session_state["custom_departure_time"] = ""
+
+
+def reset_planner_state() -> None:
+    clear_active_route()
+    for key in (
+        "dashboard_route_search_text",
+        "dashboard_route_select_id",
+        "manual_departure_icao",
+        "manual_arrival_icao",
+        "manual_departure_query",
+        "manual_arrival_query",
+        "manual_departure_choice_label",
+        "manual_arrival_choice_label",
+        "custom_departure_choice",
+        "custom_arrival_choice",
+        "_custom_route_message",
+        "sync_notice",
+    ):
+        st.session_state[key] = None if key in {"dashboard_route_select_id", "custom_departure_choice", "custom_arrival_choice"} else ""
+    st.session_state["_planner_reset_message"] = "Planner reset. No airports selected."
 
 
 def swap_manual_airport_fields() -> None:
@@ -3891,6 +3911,9 @@ if st.session_state.pop("_settings_saved_message", ""):
 if custom_route_message := st.session_state.pop("_custom_route_message", ""):
     st.success(custom_route_message)
 
+if planner_reset_message := st.session_state.pop("_planner_reset_message", ""):
+    st.success(planner_reset_message)
+
 if sync_notice := st.session_state.get("sync_notice", ""):
     st.info(sync_notice)
 
@@ -3906,6 +3929,10 @@ if st.session_state["app_menu_choice"] != "Dashboard":
     render_selected_non_dashboard_page(st.session_state["app_menu_choice"])
     render_app_footer()
     st.stop()
+
+reset_spacer, reset_col = st.columns([0.82, 0.18], gap="small")
+with reset_col:
+    st.button("Reset Planner", key="reset_planner_button", width="stretch", on_click=reset_planner_state)
 
 # ---------- Route selection ----------
 route_col, or_col, manual_col, aircraft_col = st.columns([1.55, 0.13, 1.18, 0.86], gap="small")

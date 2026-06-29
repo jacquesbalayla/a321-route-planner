@@ -3325,10 +3325,6 @@ def render_app_header() -> None:
                 </div>
             </div>
             <div class="a321-actions">
-                <a class="a321-header-btn" id="a321-settings-btn" href="?nav=Settings" target="_top">
-                    <svg class="a321-small-icon" viewBox="0 0 24 24" fill="none"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" stroke="white" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 0 1-2.83 2.83l-.04-.04a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.06a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 1 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.06A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 1 1 2.83-2.83l.04.04a1.7 1.7 0 0 0 1.88.34H9a1.7 1.7 0 0 0 1-1.56V3a2 2 0 0 1 4 0v.06a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 1 1 2.83 2.83l-.04.04a1.7 1.7 0 0 0-.34 1.88V9a1.7 1.7 0 0 0 1.56 1h.06a2 2 0 0 1 0 4h-.06A1.7 1.7 0 0 0 19.4 15Z" stroke="white" stroke-width="1.35"/></svg>
-                    Settings
-                </a>
                 <button class="a321-theme-btn" id="a321-theme-button" type="button" aria-expanded="false">
                     <span class="a321-theme-left">
                         <svg class="a321-small-icon" viewBox="0 0 24 24" fill="none"><path d="M12 22a10 10 0 1 0 0-20 4.2 4.2 0 0 0-4 4.33c0 1.2.84 2.25 2.03 2.25h1.2c1.06 0 1.92.86 1.92 1.92 0 .82-.52 1.55-1.3 1.82l-.7.24a4.05 4.05 0 0 0-2.75 3.85C8.4 19.5 10 22 12 22Z" stroke="white" stroke-width="1.8"/><circle cx="7.6" cy="8.2" r="1" fill="white"/><circle cx="10.1" cy="5.6" r="1" fill="white"/><circle cx="14.1" cy="5.8" r="1" fill="white"/><circle cx="16.5" cy="8.8" r="1" fill="white"/></svg>
@@ -3517,10 +3513,6 @@ def render_app_header() -> None:
             const menu = window.parent.document.getElementById("a321-theme-floating-menu");
             if (menu) renderMenu(false);
             else renderMenu(true);
-        }});
-        document.getElementById("a321-settings-btn").addEventListener("click", event => {{
-            event.preventDefault();
-            navigateApp("Settings");
         }});
         window.parent.document.addEventListener("click", event => {{
             const menu = window.parent.document.getElementById("a321-theme-floating-menu");
@@ -3929,12 +3921,19 @@ def render_app_footer() -> None:
 # ---------- Header ----------
 render_app_header()
 
-header_gap, header_settings_col = st.columns([0.86, 0.14], gap="small")
-with header_settings_col:
-    if st.button("⚙ Settings", key="native_header_settings_button", width="stretch"):
+nav_dashboard_col, nav_settings_col, nav_settings_link_col, nav_spacer_col = st.columns([0.18, 0.2, 0.2, 0.42], gap="small")
+with nav_dashboard_col:
+    if st.button("Dashboard", key="native_dashboard_button", width="stretch"):
+        st.session_state["app_menu_choice"] = "Dashboard"
+        st.query_params["nav"] = "Dashboard"
+        st.rerun()
+with nav_settings_col:
+    if st.button("Open Settings", key="native_header_settings_button", width="stretch", type="primary"):
         st.session_state["app_menu_choice"] = "Settings"
         st.query_params["nav"] = "Settings"
         st.rerun()
+with nav_settings_link_col:
+    st.link_button("Settings Link", "?nav=Settings", width="stretch")
 
 if st.session_state.pop("_settings_saved_message", ""):
     st.success("Settings saved.")

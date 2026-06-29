@@ -4,7 +4,7 @@ numpy
 requests
 pytz
 pydub
-pyaudioop
+pyaudioop; python_version >= "3.13"
 pydeck
 pywebview
 imageio-ffmpeg

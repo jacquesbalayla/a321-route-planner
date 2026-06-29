@@ -4,5 +4,6 @@ numpy
 requests
 pytz
 pydub
+pyaudioop
 imageio-ffmpeg
 pydeck

@@ -288,9 +288,20 @@ def normalize_announcements_dir(raw_path: str) -> str:
     if not path_text:
         raise ValueError("Announcements folder is required.")
 
+    if is_windows_absolute_path(path_text) and platform.system() != "Windows":
+        return path_text
+
     announcements_path = Path(path_text).expanduser()
     announcements_path.mkdir(parents=True, exist_ok=True)
     return str(announcements_path)
+
+
+def is_windows_absolute_path(path_text: str) -> bool:
+    return bool(re.match(r"^[A-Za-z]:[\\/]", str(path_text or "").strip()))
+
+
+def can_write_announcements_path_here(path_text: str) -> bool:
+    return not (is_windows_absolute_path(path_text) and platform.system() != "Windows")
 
 
 def build_active_settings(saved_settings: dict[str, str]) -> dict[str, str]:
@@ -391,7 +402,7 @@ OPENWEATHERMAP_API_KEY = ACTIVE_SETTINGS["openweathermap_api_key"]
 ELEVENLABS_API_KEY = ACTIVE_SETTINGS["elevenlabs_api_key"]
 SETTINGS_REQUIRED = not has_required_settings(ACTIVE_SETTINGS)
 
-if ANNOUNCEMENTS_BASE_DIR:
+if ANNOUNCEMENTS_BASE_DIR and can_write_announcements_path_here(ANNOUNCEMENTS_BASE_DIR):
     os.makedirs(ANNOUNCEMENTS_BASE_DIR, exist_ok=True)
 configure_audio_backend()
 
@@ -1318,6 +1329,11 @@ _DIGITS = {
 def get_announcements_dir(airline_code: str):
     if not ANNOUNCEMENTS_BASE_DIR:
         raise ValueError("Announcements folder is not configured.")
+    if not can_write_announcements_path_here(ANNOUNCEMENTS_BASE_DIR):
+        raise RuntimeError(
+            "Announcements can only be generated on the PC that has this Windows MSFS folder. "
+            "This app instance cannot write to that path."
+        )
 
     code = (airline_code or "DEFAULT").strip().upper()
     base_path = Path(ANNOUNCEMENTS_BASE_DIR).expanduser()
@@ -2090,14 +2106,18 @@ def generate_audio(text, voice_id, filename):
     headers = {"xi-api-key": ELEVENLABS_API_KEY}
     payload = {"text": text, "model_id": "eleven_multilingual_v2"}
 
-    response = requests.post(url, json=payload, headers=headers, stream=True, timeout=30)
+    try:
+        response = requests.post(url, json=payload, headers=headers, stream=True, timeout=30)
+    except Exception as exc:
+        st.error(f"Failed to contact ElevenLabs for {filename}: {exc}")
+        return None
     if response.status_code != 200:
-        st.error(f"Failed to generate audio for {filename}: {response.text}")
+        st.error(f"Failed to generate audio for {filename}: HTTP {response.status_code} - {response.text}")
         return None
 
-    save_dir = get_announcements_dir(st.session_state.get("airline_input", "DEFAULT"))
-    output_path = os.path.join(save_dir, filename)
     try:
+        save_dir = get_announcements_dir(st.session_state.get("airline_input", "DEFAULT"))
+        output_path = os.path.join(save_dir, filename)
         ogg_bytes = convert_mp3_bytes_to_ogg(response.content)
     except Exception as exc:
         st.error(f"Failed to prepare audio for {filename}: {exc}")
@@ -2118,6 +2138,11 @@ def create_announcement_files(dep_icao_edit: str, dest_icao_edit: str, airline: 
         return []
     if not ELEVENLABS_API_KEY:
         st.error("Open Settings and add your ElevenLabs API key first.")
+        return []
+    try:
+        announcements_dir = get_announcements_dir(airline)
+    except Exception as exc:
+        st.error(str(exc))
         return []
 
     est_tz = pytz.timezone("America/Toronto")
@@ -2165,7 +2190,6 @@ def create_announcement_files(dep_icao_edit: str, dest_icao_edit: str, airline: 
     )
 
     voice_id = "nPczCjzI2devNBz1zQrb"
-    announcements_dir = get_announcements_dir(airline)
     files = [
         ("BoardingWelcome.ogg", generate_audio(boarding_text, voice_id, "BoardingWelcome.ogg")),
         ("DescentSeatbelts.ogg", generate_audio(descent_text, voice_id, "DescentSeatbelts.ogg")),
@@ -3904,6 +3928,13 @@ def render_app_footer() -> None:
 
 # ---------- Header ----------
 render_app_header()
+
+header_gap, header_settings_col = st.columns([0.86, 0.14], gap="small")
+with header_settings_col:
+    if st.button("⚙ Settings", key="native_header_settings_button", width="stretch"):
+        st.session_state["app_menu_choice"] = "Settings"
+        st.query_params["nav"] = "Settings"
+        st.rerun()
 
 if st.session_state.pop("_settings_saved_message", ""):
     st.success("Settings saved.")

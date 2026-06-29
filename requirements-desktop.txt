@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy
+requests
+pytz
+pydub
+pydeck
+pywebview
+imageio-ffmpeg
+pyinstaller

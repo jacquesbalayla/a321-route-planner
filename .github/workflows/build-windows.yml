@@ -1,0 +1,47 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "app.py"
+      - "desktop_launcher.py"
+      - "server_runner.py"
+      - "build.py"
+      - "build_windows.bat"
+      - "requirements-desktop.txt"
+      - "Route List.csv"
+      - "airports.json"
+      - "countries.csv"
+      - "assets/**"
+      - ".github/workflows/build-windows.yml"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install desktop build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-desktop.txt
+
+      - name: Build Windows executable
+        run: python build.py
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: A321-Flight-Planner-Windows
+          path: dist/A321 Flight Planner.exe
+          if-no-files-found: error

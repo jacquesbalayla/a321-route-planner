@@ -44,6 +44,10 @@ HIDDEN_IMPORTS = [
     "pydeck",
     "pytz",
 ]
+COPY_METADATA_PACKAGES = [
+    "streamlit",
+    "pydeck",
+]
 EXCLUDED_MODULES = [
     "IPython",
     "jupyter",
@@ -105,6 +109,9 @@ def build_command() -> list[str]:
 
     for module_name in HIDDEN_IMPORTS:
         command.extend(["--hidden-import", module_name])
+
+    for package_name in COPY_METADATA_PACKAGES:
+        command.extend(["--copy-metadata", package_name])
 
     for module_name in EXCLUDED_MODULES:
         command.extend(["--exclude-module", module_name])
